@@ -8,40 +8,38 @@ import { useCurrentFrame, useVideoConfig} from "remotion";
 
 type Props = {
     code: string,
+    timings: number[],
 };
 
-export const AssemblyRunPlayback = ({code}: Props) => {
+export const AssemblyRunPlayback = ({ code, timings }: Props) => {
     // Video information
     const {fps} = useVideoConfig();
     const frame = useCurrentFrame();
-
-    // Stuffs
-    const lineCodes = code.split("\n");
+    const playbackTimeMs = (frame/fps) * 1000;
 
     // States
     const [currentExecutedLine, setCurrentExecutedLine] = useState(0);
     const [timeToWait, setTimeToWait] = useState<any>(null);
-    const [lastSyscallNumber, setLastSyscallNumber] = useState(0);
-    const [playbackTimeMs, setPlaybackTimeMs] = useState((frame / fps) * 1000);
 
     // Functions
+    const isInViewport = (elem: Element) => {
+        const bounding = elem.getBoundingClientRect();
+        return (
+            bounding.top >= 0 &&
+            bounding.left >= 0 &&
+            bounding.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+            bounding.right <= (window.innerWidth || document.documentElement.clientWidth)
+        );
+    };
 
     // Some shitty logic
     useEffect(() => {
-       setPlaybackTimeMs((frame / fps) * 1000)
-    }, [frame]);
-
-    useEffect(() => {
-        const currentLine = lineCodes?.[currentExecutedLine - 1]?.replace("\t", "");
-        const isCurrentInstructionSyscall = currentLine === "syscall";
-
-        if (playbackTimeMs < timeToWait && isCurrentInstructionSyscall) {
+        if (playbackTimeMs < timeToWait) {
             return;
         }
 
         if (timeToWait !== null && playbackTimeMs > timeToWait) {
             setTimeToWait(null);
-            setLastSyscallNumber(0);
         }
 
 
@@ -51,36 +49,12 @@ export const AssemblyRunPlayback = ({code}: Props) => {
     // The logic for make right stuff
     useEffect(() => {
         // Scroll to the hightlighted line
-        const highlightedLine = document.querySelector(`code > span[style]:not([style=''])`);
-        highlightedLine?.scrollIntoView({ behavior: "smooth" });
+        // const highlightedLine = document.querySelector(`code > span[style]:not([style=''])`);
+        // if (highlightedLine !== null && !isInViewport(highlightedLine)) {
+        //     highlightedLine.scrollIntoView();
+        // }
 
-        const currentLine = lineCodes?.[currentExecutedLine - 1]?.replace("\t", "") ?? "";
-        const lineSuffixGen = (register: string) => `li ${register}`;
-
-        // If $v0 line
-        let registerToCheck = "$v0";
-        let lineSuffix = lineSuffixGen(registerToCheck);
-
-        if (currentLine.startsWith(lineSuffix)) {
-            setLastSyscallNumber(Number(currentLine.replace(lineSuffix, "")));
-            return;
-        }
-
-        // If sleep
-        registerToCheck = "$a0";
-        lineSuffix = lineSuffixGen(registerToCheck);
-        if (lastSyscallNumber === 32 && currentLine.startsWith(lineSuffix)) {
-            setTimeToWait(playbackTimeMs + Number(currentLine.replace(lineSuffix, "")));
-            return;
-        }
-
-        // If sound
-        registerToCheck = "$a1";
-        lineSuffix = lineSuffixGen(registerToCheck);
-        if (lastSyscallNumber === 33 && currentLine.startsWith(lineSuffix)) {
-            setTimeToWait(playbackTimeMs + Number(currentLine.replace(lineSuffix, "")));
-        }
-
+        setTimeToWait(playbackTimeMs + timings[currentExecutedLine]);
     }, [currentExecutedLine]);
 
     return (
